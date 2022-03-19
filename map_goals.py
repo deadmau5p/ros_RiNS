@@ -26,8 +26,9 @@ class Map_Goals:
         self.ms = rospy.Subscriber("/map", OccupancyGrid, self.callback)
         self.x_axis, self.y_axis, self.angle_r, self.angular_speed_r, self.start_angle = 0,0,0,0,0
         self.current_goal = MoveBaseGoal()
+        self.current_task = []
 
-        self.goals = [
+        goals_map1 = [
             ["explore_goal", -0.14, 0.74],
             ["explore_goal",-0.12, -0.81],
             ["explore_goal",0.66, -0.83],
@@ -41,6 +42,18 @@ class Map_Goals:
             ["explore_goal",0.73, 2.74],
             ["explore_goal",-0.74, 2.19]
         ]
+
+        goal_map2 = [
+            ["explore_goal", -2.56, 1.00],
+            ["explore_goal",-2.4, -0.17],
+            ["explore_goal",-1.27, -0.08],
+            ["explore_goal",0.4, 0.44],
+            ["explore_goal",-0.46, 1.45],
+            ["explore_goal",-1.44, 2.22],
+            ["explore_goal",-2.25, 3.55],
+        ]
+
+        self.goals = goal_map2
 
         self.map=None
         self.map_reso = None
@@ -84,9 +97,9 @@ class Map_Goals:
 
     def go_to_goals(self):
         self.ac.wait_for_server()
-        while self.goals != 0:
-            #print(self.goals)
+        while len(self.goals) != 0:
             goal_ = self.goals.pop(0)
+            self.current_task = goal_
             print(goal_)
             if goal_[0] == "rotate_task":
                 self.rotate(goal_[1], goal_[2], goal_[3])
@@ -117,12 +130,19 @@ class Map_Goals:
                 self.ac.cancel_goal()
                 continue   
             """
+            self.current_task = []
             if  goal_[0] == "approach_face":
                 rospy.loginfo("Hello from ROS")
             elif goal_[0] == "explore_goal":
-                self.add_rotate_goals(goal.target_pose.pose.position)
+                self.goals.insert(0,["rotate_task", self.angle, goal_[1],goal_[2]])
 
-            
+    def get_index_of_last_approach_task(self):
+        ret_val = -1
+        for i in range(len(self.goals)):
+            if self.goals[i][0] == "approach_face":
+                ret_val = i
+        return ret_val
+
 
     def approach_face(self, data):
         self.rotate_b = False
@@ -133,16 +153,18 @@ class Map_Goals:
         goal.target_pose.pose.position.y = data.goal.position.y
         goal.target_pose.header.stamp = rospy.Time.now()
         coord = self.current_goal.goal.target_pose.pose.position
-        self.ac.cancel_goal()
-        a = ["explore_goal", coord.x, coord.y]
+        last_app = self.get_index_of_last_approach_task()
 
-        if self.goals[0][0] == "rotate_task":
-            self.goals.insert(1,["approach_face", data.goal.position.x, data.goal.position.y ] )
-            self.goals.insert(2, a)
-        else:
+        if self.current_task == []:
             self.goals.insert(0,["approach_face", data.goal.position.x, data.goal.position.y ] )
-            self.goals.insert(1, a)
-        
+        elif self.current_task[0] == "explore_goal":
+            self.ac.cancel_goal()
+            self.goals.insert(0,["approach_face", data.goal.position.x, data.goal.position.y ] )
+        elif self.current_task[0] == "approach_face":
+            last_app = self.get_index_of_last_approach_task()
+            self.goals.insert(last_app+1,["approach_face", data.goal.position.x, data.goal.position.y ] )
+        elif self.current_task[0] == "rotate_task":
+            self.goals.insert(last_app+1,["approach_face", data.goal.position.x, data.goal.position.y ] )
         
     
     def rotate(self, angle, pointx, pointy):
@@ -150,7 +172,6 @@ class Map_Goals:
         
         rat = rospy.Rate(2)
         for i in range(3):
-            print(i)
             start_angle = angle
             goal = MoveBaseGoal()
             q = quaternion_from_euler(0, 0, (angles[i]+start_angle)%(2*math.pi))
@@ -164,9 +185,6 @@ class Map_Goals:
             self.ac.send_goal_and_wait(goal)
             rat.sleep()
         
-
-    def add_rotate_goals(self, point):
-        self.goals.insert(0,["rotate_task", self.angle, point.x,point.y] )
 
 
 if __name__ == "__main__":

@@ -1,12 +1,8 @@
 #!/usr/bin/python3
 
 from cmath import nan
-import math
-from shutil import move
 import sys
 from time import time
-
-from torch import mkldnn_convolution_backward_weights
 import rospy
 import dlib
 import cv2
@@ -15,11 +11,10 @@ import tf2_geometry_msgs
 import tf2_ros
 #import matplotlib.pyplot as plt
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import PointStamped, Vector3, Pose
+from geometry_msgs.msg import PointStamped, Vector3, Pose, PoseWithCovarianceStamped
 from cv_bridge import CvBridge, CvBridgeError
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA
-from nav_msgs.msg import Odometry
 from task1.msg import ObjectDetection
 import matplotlib.pyplot as plt
 
@@ -33,14 +28,14 @@ class face_localizer:
         self.dims = (0, 0, 0)
         self.marker_array = MarkerArray()
         self.marker_num = 1
-        rospy.Subscriber('/odom', Odometry, self.odom_callback)
+        rospy.Subscriber('/amcl_pose', PoseWithCovarianceStamped, self.pose_callback)
         self.markers_pub = rospy.Publisher('face_markers', MarkerArray, queue_size=1000)
         self.face_pub = rospy.Publisher('face_detection', ObjectDetection, queue_size=1000)
         self.tf_buf = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buf)
 
-    def odom_callback(self, odom):
-        self.current_pose = odom
+    def pose_callback(self, pose):
+        self.current_pose = pose
 
     def get_pose(self,coords,dist,stamp):
         k_f = 554 # kinect focal length in pixels
@@ -182,21 +177,23 @@ class face_localizer:
         approach_point.position.x = p1.x + goal_coor[0]
         approach_point.position.y = p1.y + goal_coor[1]
         approach_point.position.z = 0
+
+        #print(self.points_in_circle_np(0.5, p2.x, p2.y))
         return approach_point
 
 
-    def points_in_circle_np(self, radius, x0=0, y0=0, ):
+    def points_in_circle_np(self, radius, x0=0, y0=0):
         x_ = np.arange(x0 - radius - 1, x0 + radius + 1, dtype=int)
         y_ = np.arange(y0 - radius - 1, y0 + radius + 1, dtype=int)
         x, y = np.where((x_[:,np.newaxis] - x0)**2 + (y_ - y0)**2 <= radius**2)
         for x, y in zip(x_[x], y_[y]):
-            yield x, y
+            return x, y
 
 def main():
 
         face_finder = face_localizer()
 
-        rate = rospy.Rate(1)
+        rate = rospy.Rate(10)
         rospy.Subscriber("/camera/rgb/image_raw", Image)
         rospy.Subscriber("/camera/depth/image_raw", Image)
         while not rospy.is_shutdown():
