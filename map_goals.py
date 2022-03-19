@@ -1,47 +1,64 @@
 import time
+from turtle import goto
 import rospy
 import actionlib
-from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal, MoveBaseActionGoal
 from nav_msgs.msg import OccupancyGrid
 import numpy as np
 from geometry_msgs.msg import Twist
 from task1.msg import ObjectDetection
+from geometry_msgs.msg import PoseWithCovarianceStamped
+from tf.transformations import quaternion_from_euler
+from tf.transformations import euler_from_quaternion
+import math
 
 
 class Map_Goals:
     
     def __init__(self):
-
+        
         rospy.init_node("map_goals")
         self.ac = actionlib.SimpleActionClient("move_base", MoveBaseAction)
+        rospy.Subscriber("move_base/goal", MoveBaseActionGoal, self.get_current_goal)
         self.localization_publisher = rospy.Publisher('/navigation_velocity_smoother/raw_cmd_vel', Twist, queue_size = 1)
+        rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.poseCallBack)
         rospy.Subscriber('/face_detection', ObjectDetection, self.face_detection)
         self.ms = rospy.Subscriber("/map", OccupancyGrid, self.callback)
         self.x_axis, self.y_axis, self.angle_r, self.angular_speed_r, self.start_angle = 0,0,0,0,0
+        self.current_goal = MoveBaseGoal()
 
         self.goals = [
-            [0.12, 0.01],
-            [-0.12, -0.81],
-            [0,66, -0.83],
-            [2.02, 0.94],
-            [2.75, -0.32],
-            [3.37, -0.29],
-            [2.64, 0.43],
-            [1.38, 0.90],
-            [1.22, 1.39],
-            [1.17, 2.16],
-            [0.73, 2.74],
-            [-0.74, 2.19],
-            [-0.55, -1.56]
+            ["explore_goal", -0.14, 0.74],
+            ["explore_goal",-0.12, -0.81],
+            ["explore_goal",0.66, -0.83],
+            ["explore_goal",2.02, 0.94],
+            ["explore_goal",2.75, -0.32],
+            ["explore_goal",3.37, -0.29],
+            ["explore_goal",2.64, 0.43],
+            ["explore_goal",1.38, 0.90],
+            ["explore_goal",1.22, 1.39],
+            ["explore_goal",1.17, 2.16],
+            ["explore_goal",0.73, 2.74],
+            ["explore_goal",-0.74, 2.19]
         ]
 
         self.map=None
         self.map_reso = None
         self.map_data = None
+        self.rotate_b = True
+        self.angle = 0
         time.sleep(1)
     
     def feedback_cb(self, feedback):
         pass
+
+
+    def poseCallBack(self, neki: PoseWithCovarianceStamped):
+        orientation = neki.pose.pose.orientation
+        self.angle = euler_from_quaternion((orientation.x, orientation.y, orientation.z, orientation.w))[2] + math.pi
+    
+    def get_current_goal(self, goal):
+        self.current_goal = goal
 
 
     def flip_y(self, data):
@@ -51,7 +68,7 @@ class Map_Goals:
         return ret
 
     def face_detection(self, data):
-        rospy.loginfo(data.s)
+
         self.approach_face(data)
 
 
@@ -66,23 +83,30 @@ class Map_Goals:
 
 
     def go_to_goals(self):
-        for goal_ in self.goals:
-            self.ac.wait_for_server()
-            goal = MoveBaseGoal()
-            goal.target_pose.header.frame_id="map"
-            goal.target_pose.pose.orientation.w = 1
-            goal.target_pose.pose.position.x = goal_[0]
-            goal.target_pose.pose.position.y = goal_[1]
-            goal.target_pose.header.stamp = rospy.Time.now()
-            self.ac.send_goal(goal, feedback_cb=self.feedback_cb)
+        self.ac.wait_for_server()
+        while self.goals != 0:
+            #print(self.goals)
+            goal_ = self.goals.pop(0)
+            print(goal_)
+            if goal_[0] == "rotate_task":
+                self.rotate(goal_[1], goal_[2], goal_[3])
+            else:
+                goal = MoveBaseGoal()
+                goal.target_pose.header.frame_id="map"
+                goal.target_pose.pose.orientation.w = 1
+                goal.target_pose.pose.position.x = goal_[1]
+                goal.target_pose.pose.position.y = goal_[2]
+                goal.target_pose.header.stamp = rospy.Time.now()
+                self.ac.send_goal_and_wait(goal)
 
+            """
             or_x = self.map.info.origin.position.x
             or_y = self.map.info.origin.position.y
             height_map = self.map.info.height
 
             pixel_x = int((goal_[0] - or_x)/self.map_reso)
             pixel_y = int((height_map*self.map_reso + or_y + (-1)*goal_[1])/self.map_reso)
-
+            
             if pixel_x > self.x_axis or pixel_y > self.y_axis or pixel_x < 0 or pixel_y < 0:
                 rospy.logwarn(f'Unreachable, canceling goal because out of bounds {goal_[0]}{goal_[1]}!')
                 self.ac.cancel_goal()
@@ -92,36 +116,57 @@ class Map_Goals:
                 rospy.logwarn(f'Unreachable, canceling goal, because occupied!{goal_[0]}{goal_[1]}')
                 self.ac.cancel_goal()
                 continue   
+            """
+            if  goal_[0] == "approach_face":
+                rospy.loginfo("Hello from ROS")
+            elif goal_[0] == "explore_goal":
+                self.add_rotate_goals(goal.target_pose.pose.position)
 
-            self.ac.wait_for_result()
-            rospy.loginfo("goal is done rotate around")
-            self.rotate()
-
+            
 
     def approach_face(self, data):
-        self.ac.cancel_all_goals()
-        rospy.loginfo(f"I am approaching face at {data.goal}")
-        print(data)
+        self.rotate_b = False
+        goal = MoveBaseGoal()
+        goal.target_pose.header.frame_id="map"
+        goal.target_pose.pose.orientation.w = 1
+        goal.target_pose.pose.position.x = data.goal.position.x
+        goal.target_pose.pose.position.y = data.goal.position.y
+        goal.target_pose.header.stamp = rospy.Time.now()
+        coord = self.current_goal.goal.target_pose.pose.position
+        self.ac.cancel_goal()
+        a = ["explore_goal", coord.x, coord.y]
+
+        if self.goals[0][0] == "rotate_task":
+            self.goals.insert(1,["approach_face", data.goal.position.x, data.goal.position.y ] )
+            self.goals.insert(2, a)
+        else:
+            self.goals.insert(0,["approach_face", data.goal.position.x, data.goal.position.y ] )
+            self.goals.insert(1, a)
         
-
-
-
-
-    def rotate(self):
-        current_angle = 0
-        t0 = rospy.Time.now().secs
-        self.angular_speed_r = 30 * 3.14 / 180
-        self.angle_r = 360 * 3.14 / 180
-        rate = rospy.Rate(10)
-        while (current_angle < self.angle_r):
-            cmd=Twist()
-            cmd.angular.z = self.angular_speed_r
-            self.localization_publisher.publish(cmd)
-            t1 = rospy.Time.now().secs
-            current_angle = self.angular_speed_r * (t1 - t0)
-            rate.sleep()
+        
     
+    def rotate(self, angle, pointx, pointy):
+        angles = [0, 2*math.pi/3, 4*math.pi/3, 0]
         
+        rat = rospy.Rate(2)
+        for i in range(3):
+            print(i)
+            start_angle = angle
+            goal = MoveBaseGoal()
+            q = quaternion_from_euler(0, 0, (angles[i]+start_angle)%(2*math.pi))
+                
+            goal.target_pose.header.frame_id = "map"
+            goal.target_pose.pose.position.x = pointx
+            goal.target_pose.pose.position.y = pointy
+            goal.target_pose.pose.orientation.z = q[2]
+            goal.target_pose.pose.orientation.w = q[3]
+            goal.target_pose.header.stamp = rospy.Time.now()
+            self.ac.send_goal_and_wait(goal)
+            rat.sleep()
+        
+
+    def add_rotate_goals(self, point):
+        self.goals.insert(0,["rotate_task", self.angle, point.x,point.y] )
 
 
 if __name__ == "__main__":
