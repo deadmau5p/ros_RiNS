@@ -18,16 +18,21 @@ class Map_Goals:
     def __init__(self):
         
         rospy.init_node("map_goals")
+        #inicializiramo ActionClient
         self.ac = actionlib.SimpleActionClient("move_base", MoveBaseAction)
+        #subscribamo da dobivamo trenutni cilj
         rospy.Subscriber("move_base/goal", MoveBaseActionGoal, self.get_current_goal)
-        self.localization_publisher = rospy.Publisher('/navigation_velocity_smoother/raw_cmd_vel', Twist, queue_size = 1)
+        #subscribamo da dobivamo trenutno poso robota
         rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.poseCallBack)
+        #subscribamo na nas face detector
         rospy.Subscriber('/face_detection', ObjectDetection, self.face_detection)
+        #subscribamo na sliko mape
         self.ms = rospy.Subscriber("/map", OccupancyGrid, self.callback)
         self.x_axis, self.y_axis, self.angle_r, self.angular_speed_r, self.start_angle = 0,0,0,0,0
         self.current_goal = MoveBaseGoal()
         self.current_task = []
 
+        #goali za Aljazevo mapo
         goals_map1 = [
             ["explore_goal", -0.14, 0.74],
             ["explore_goal",-0.12, -0.81],
@@ -43,6 +48,7 @@ class Map_Goals:
             ["explore_goal",-0.74, 2.19]
         ]
 
+        #goali za drugo mapo
         goal_map2 = [
             ["explore_goal", -2.56, 1.00],
             ["explore_goal",-2.4, -0.17],
@@ -58,33 +64,36 @@ class Map_Goals:
         self.map=None
         self.map_reso = None
         self.map_data = None
-        self.rotate_b = True
         self.angle = 0
         time.sleep(1)
     
+    #maybe useless
     def feedback_cb(self, feedback):
         pass
 
-
+    #nastavimo trenutno orientacijo in kot v eulerju
     def poseCallBack(self, neki: PoseWithCovarianceStamped):
         orientation = neki.pose.pose.orientation
         self.angle = euler_from_quaternion((orientation.x, orientation.y, orientation.z, orientation.w))[2] + math.pi
     
+    #nastavimo trenutni goal
     def get_current_goal(self, goal):
         self.current_goal = goal
 
-
+    #pomožna funkcija ki ubrne mapo za računanje prostih mest, brez tega ne dela
     def flip_y(self, data):
         ret = np.copy(data)
         for j in range(self.y_axis):
             ret[j] = data[self.x_axis - 1 -j]
         return ret
 
+    #funkcija kamor prleti nov face detection iz face detectorja
     def face_detection(self, data):
-
+        #klicemo funkcijo ki nardi approach do obraza
         self.approach_face(data)
 
 
+    #funkcija kjer nastavimo lastnosti mape
     def callback(self, map):
         self.map = map
         self.map_reso = map.info.resolution
@@ -95,12 +104,19 @@ class Map_Goals:
         self.status = 0
 
 
+    #funkcija ki nas premika po mapi s pomočjo arraya trenutnih ciljev
     def go_to_goals(self):
         self.ac.wait_for_server()
+
+        #dokler array ciljev ni prazen izvajamo zanko
         while len(self.goals) != 0:
+            #vzamemo prvi cilj 
             goal_ = self.goals.pop(0)
+            #nastavimo trenutni cilj
             self.current_task = goal_
-            print(goal_)
+            #print(goal_)
+
+            #trenutno imamo dve opciji ali rotairamo ali pa gremo na določen cilj(approach ali basic explore)
             if goal_[0] == "rotate_task":
                 self.rotate(goal_[1], goal_[2], goal_[3])
             else:
@@ -130,12 +146,18 @@ class Map_Goals:
                 self.ac.cancel_goal()
                 continue   
             """
+            #izbrisemo trenutni cilj saj je že izveden
             self.current_task = []
+
+
             if  goal_[0] == "approach_face":
+                time.sleep(2)
                 rospy.loginfo("Hello from ROS")
             elif goal_[0] == "explore_goal":
+                #če smo bili na exploru se potem nakoncu vsakega explora vrtimo za 360
                 self.goals.insert(0,["rotate_task", self.angle, goal_[1],goal_[2]])
 
+    #funkcija ki vrne index zadnjega approch goala v ciljih
     def get_index_of_last_approach_task(self):
         ret_val = -1
         for i in range(len(self.goals)):
@@ -143,28 +165,34 @@ class Map_Goals:
                 ret_val = i
         return ret_val
 
-
+    #funkcija za pristop do obraza
     def approach_face(self, data):
-        self.rotate_b = False
+        #naredimo nov goal na tocko approacha
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id="map"
         goal.target_pose.pose.orientation.w = 1
         goal.target_pose.pose.position.x = data.goal.position.x
         goal.target_pose.pose.position.y = data.goal.position.y
+        goal.target_pose.pose.orientation.x = data.goal.orientation.x
+        goal.target_pose.pose.orientation.y = data.goal.orientation.y
+        goal.target_pose.pose.orientation.z = data.goal.orientation.z
+        goal.target_pose.pose.orientation.w = data.goal.orientation.w
+
         goal.target_pose.header.stamp = rospy.Time.now()
-        coord = self.current_goal.goal.target_pose.pose.position
+
         last_app = self.get_index_of_last_approach_task()
 
         if self.current_task == []:
             self.goals.insert(0,["approach_face", data.goal.position.x, data.goal.position.y ] )
-        elif self.current_task[0] == "explore_goal":
+        elif self.current_task[0] == "explore_goal": #če smo sredi explora ga canclamo in dodamo approach goal
             self.ac.cancel_goal()
             self.goals.insert(0,["approach_face", data.goal.position.x, data.goal.position.y ] )
         elif self.current_task[0] == "approach_face":
             last_app = self.get_index_of_last_approach_task()
-            self.goals.insert(last_app+1,["approach_face", data.goal.position.x, data.goal.position.y ] )
+            self.goals.insert(last_app+1,["approach_face", data.goal.position.x, data.goal.position.y ] ) #dodamo approach za zadnji approach goal
         elif self.current_task[0] == "rotate_task":
-            self.goals.insert(last_app+1,["approach_face", data.goal.position.x, data.goal.position.y ] )
+            self.goals.insert(last_app+1,["approach_face", data.goal.position.x, data.goal.position.y ] ) #dodamo approach za zadnji approach goal
+            #pocakamo da se odrotira
         
     
     def rotate(self, angle, pointx, pointy):
