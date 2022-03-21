@@ -34,6 +34,7 @@ class face_localizer:
         rospy.Subscriber('/amcl_pose', PoseWithCovarianceStamped, self.pose_callback)
         self.markers_pub = rospy.Publisher('face_markers', MarkerArray, queue_size=1000)
         self.face_pub = rospy.Publisher('face_detection', ObjectDetection, queue_size=1000)
+        
         self.tf_buf = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buf)
 
@@ -108,7 +109,7 @@ class face_localizer:
 
         k_f = 554 # kinect focal length in pixels
         x1, x2, y1, y2 = coords
-        if x1 < 0 or y1 < 0 or y2 > self.dims[0] or x2 > self.dims[1]:
+        if x1 < 0 or y1 < 0 or y2 >= self.dims[0] or x2 >= self.dims[1]:
             return None, None, None, None
 
 
@@ -122,8 +123,6 @@ class face_localizer:
         angle_to_target_y1 = np.arctan2(face_y1,k_f)
         angle_to_target_y2 = np.arctan2(face_y2,k_f)
 
-        #print(y1, y1, y2, x2)
-        #print(depth_image[y1,x1],depth_image[y1,x2],depth_image[y2,x1],depth_image[y2,x2])
         if math.isnan(depth_image[y1,x1]) or math.isnan(depth_image[y1,x2]) or math.isnan(depth_image[y2,x1]) or math.isnan(depth_image[y2,x2]):
             return None, None, None, None
         else:
@@ -195,7 +194,6 @@ class face_localizer:
             pose4.position.y = point_world4.point.y
             pose4.position.z = point_world4.point.z
 
-            #print("1", pose1.position,"2",  pose2.position,"3", pose3.position,"4",  pose4.position)
         except Exception as e:
             print(e)
             pose1 = None
@@ -209,13 +207,13 @@ class face_localizer:
         try:
             rgb_image_message = rospy.wait_for_message("/camera/rgb/image_raw", Image)
         except Exception as e:
-            #print(e)
+            print(e)
             return 0
 
         try:
             depth_image_message = rospy.wait_for_message("/camera/depth/image_raw", Image)
         except Exception as e:
-            #print(e)
+            print(e)
             return 0
 
         try:
@@ -239,9 +237,6 @@ class face_localizer:
             y2 = face_rectangle.bottom()
             face_region = rgb_image[y1:y2,x1:x2]
 
-            # Visualize the extracted face
-            """plt.imshow(face_rectangle[0,0])
-            plt.show()"""
             
             if y1 < 0 or y2 < 0 or x1 < 0 or x2 < 0:
                 return 0
@@ -293,7 +288,6 @@ class face_localizer:
                         self.marker_array.markers.append(marker)
                         self.markers_pub.publish(self.marker_array)
                         msg = ObjectDetection()
-                        print("found face")
                         msg.goal = self.calculate_approaching_point(pose, face_distance, pose1, pose2, pose3, pose4)
                         msg.s = "face detected :)"
                         self.face_pub.publish(msg)
@@ -309,7 +303,9 @@ class face_localizer:
         #slika je ravnina zračunamo normalo
         normal_vector = np.array(self.get_normal_on_face(pose1, pose2, pose3, pose4))
 
-        print(normal_vector)
+
+        orient = quaternion_from_euler(normal_vector[0], normal_vector[1], normal_vector[2])
+        normal_vector[2] = 0
 
         #vektor ki oribližno pove kam gledamo
         move_vec = np.array([p2.x - p1.x, p2.y-p1.y, 0])
@@ -322,7 +318,7 @@ class face_localizer:
             normal_vector = normal_vector * (-1)
         
         #izračunamo ratio da bo nas vektor od slike dolg 0.5 metra (oddaljenost approaching pointa do slike)
-        ratio = 0.5 / np.sum( np.sqrt(np.dot(normal_vector, normal_vector)))
+        ratio = 0.4 / np.sum( np.sqrt(np.dot(normal_vector, normal_vector)))
         goal_coor = [p2.x, p2.y, 0]+ normal_vector * ratio
 
         #nastavimo approach point
@@ -332,7 +328,6 @@ class face_localizer:
         approach_point.position.z = 0
         normal_vector = normal_vector * (-1)
         orient = quaternion_from_euler(normal_vector[0], normal_vector[1], normal_vector[2])
-        print(orient)
         approach_point.orientation.x = orient[0]
         approach_point.orientation.y = orient[1]
         approach_point.orientation.z = orient[2]
@@ -346,7 +341,7 @@ class face_localizer:
         r_b = [pose2.position.x - pose1.position.x, pose2.position.y - pose1.position.y, pose2.position.z - pose1.position.z]
         s_b = [pose3.position.x - pose1.position.x, pose3.position.y - pose1.position.y, pose3.position.z - pose1.position.z]
         #naredimo vektorski produkt
-        cross_normal = [(r_b[1]*s_b[2]- r_b[2]*s_b[1]), (r_b[2]*s_b[0] - r_b[0]*s_b[2]), 0]
+        cross_normal = [(r_b[1]*s_b[2]- r_b[2]*s_b[1]), (r_b[2]*s_b[0] - r_b[0]*s_b[2]), r_b[0]*s_b[1] - r_b[1]*s_b[0]]
         return cross_normal
 
 
