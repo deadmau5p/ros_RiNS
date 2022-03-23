@@ -324,8 +324,7 @@ class face_localizer:
         approach_point.position.y = goal_coor[1]
         approach_point.position.z = 0
 
-        if cosine_between >= 0:
-            normal_vector = normal_vector * (-1)
+        normal_vector[1] = normal_vector[1] * (-1)
 
         normal_vector /= np.sqrt(np.sum(normal_vector**2))
         angle1 = np.arctan2(normal_vector[1], normal_vector[0])
