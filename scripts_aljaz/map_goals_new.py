@@ -9,7 +9,7 @@ from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal, MoveBaseActionGoal
 from nav_msgs.msg import OccupancyGrid
 import numpy as np
 from geometry_msgs.msg import Twist, Pose, Point
-from task1.msg import ObjectDetection, PointArray
+from task1.msg import ObjectDetection, PointArray, MakeMarker
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from tf.transformations import quaternion_from_euler
 from tf.transformations import euler_from_quaternion
@@ -27,6 +27,8 @@ class GoalSetter:
         
         self.x_axis, self.y_axis, self.angle_r, self.angular_speed_r, self.angle = 0,0,0,0,0
         self.location = Point()
+        
+        self.marker_pub = rospy.Publisher('/marker_service/input', MakeMarker, queue_size=1000)
         
         #Aljaz goali, nevem zakaj mormo met drgacne ?
         """
@@ -52,7 +54,7 @@ class GoalSetter:
             ["explore_goal", -2.16, -0.34],
             ["explore_goal", -1.0, 0.19],
             ["explore_goal", -1.82, 1.44],
-            #["explore_goal", -2.37, 2.24],
+            ["explore_goal", -2.37, 2.24],
             ["explore_goal", -0.7, 2],
             ["explore_goal", 1.3, 1.8],
             ["explore_goal", 1.5, 0.5],
@@ -123,6 +125,7 @@ class GoalSetter:
         self.simpleAction.wait_for_server()
         while len(self.goals) != 0:
             next_goal = self.goals.pop(0)
+            
             print(next_goal)
             if next_goal[0] == "rotate_task":
                 self.do_rotate_goal()

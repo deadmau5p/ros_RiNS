@@ -16,6 +16,7 @@ add_message_files(DIRECTORY msg
   FILES
   ObjectDetection.msg
   PointArray.msg
+  MakeMarker.msg
 )
 
 generate_messages(DEPENDENCIES std_msgs geometry_msgs)

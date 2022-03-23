@@ -12,15 +12,35 @@ import tf2_geometry_msgs
 import tf2_ros
 #import matplotlib.pyplot as plt
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import PointStamped, Vector3, Pose, PoseWithCovarianceStamped
+from geometry_msgs.msg import PointStamped, Vector3, Pose, PoseWithCovarianceStamped, Point
 from cv_bridge import CvBridge, CvBridgeError
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA
-from task1.msg import ObjectDetection
+from task1.msg import ObjectDetection, MakeMarker
 import matplotlib.pyplot as plt
 import  numpy as np
 from tf.transformations import quaternion_from_euler, euler_from_quaternion
 
+
+            # neki = Point(next_goal[1],next_goal[2],0)
+            # neki2 = MakeMarker()
+            # neki2.point = neki
+            # neki2.color = "red" 
+            # self.marker_pub.publish(neki2)
+
+class OrientedPoint:
+    # simple class for point and rotation
+    def __init__(self, point: Point, angle: float):
+        self.point = point
+        self.angle = angle
+        
+    def is_close(self, other):
+        # for checking if similar to another OrientedPoint
+        if abs(self.angle - other.angle) > math.pi/3 and abs(self.angle - other.angle) < math.pi + 2*math.pi/3:
+            return False 
+        if math.dist((self.point.x, self.point.y), (other.point.x, other.point.y)) > 0.5:
+            return False
+        return True
 
 class face_localizer:
     def __init__(self):
@@ -29,14 +49,14 @@ class face_localizer:
         self.bridge = CvBridge()
         self.face_detector = dlib.get_frontal_face_detector()
         self.dims = (0, 0, 0)
-        self.marker_array = MarkerArray()
-        self.marker_num = 1
         rospy.Subscriber('/amcl_pose', PoseWithCovarianceStamped, self.pose_callback)
-        self.markers_pub = rospy.Publisher('face_markers', MarkerArray, queue_size=1000)
         self.face_pub = rospy.Publisher('face_detection', ObjectDetection, queue_size=1000)
         
         self.tf_buf = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buf)
+        
+        self.marker_pub = rospy.Publisher('/marker_service/input', MakeMarker, queue_size=1000)
+        self.marker_array = [] # array of oriented points
 
     def pose_callback(self, pose):
         self.current_pose = pose
@@ -52,16 +72,6 @@ class face_localizer:
         angle_to_target = np.arctan2(face_x,k_f)
 
         x, y = dist*np.cos(angle_to_target), dist*np.sin(angle_to_target)
-
-        ### Define a stamped message for transformation - directly in "base_link"
-        point_s = PointStamped()
-        point_s.point.x = x
-        point_s.point.y = y
-        point_s.point.z = 0.3
-        point_s.header.frame_id = "base_link"
-        point_s.header.stamp = rospy.Time(0)
-
-        
 
         # Define a stamped message for transformation - in the "camera rgb frame"
         point_s = PointStamped()
@@ -87,20 +97,8 @@ class face_localizer:
         return pose
 
     def add_marker(self, pose):
-        self.marker_num += 1
-        marker = Marker()
-        marker.header.stamp = rospy.Time(0)
-        marker.header.frame_id = 'map'
-        marker.pose = pose
-        marker.type = Marker.CUBE
-        marker.action = Marker.ADD
-        marker.frame_locked = False
-        marker.lifetime = rospy.Duration.from_sec(10)
-        marker.scale = Vector3(0.1, 0.1, 0.1)
-        marker.color = ColorRGBA(1, 1, 0, 1)
-        marker.id = self.marker_num
-        self.marker_array.markers.append(marker)
-        self.markers_pub.publish(self.marker_array)
+        makeMarker = MakeMarker(pose.position, "green")
+        self.marker_pub.publish(makeMarker)
 
     #pofejkana funkcija get_pose da dobimo 4 točke na ravnini slike
     def get_4points_of_image_in_world(self,coords,depth_image,stamp):
@@ -250,49 +248,56 @@ class face_localizer:
                 pose1, pose2, pose3, pose4 = self.get_4points_of_image_in_world((x1,x2,y1,y2), depth_image, depth_time)
                 if pose1 is None:
                     continue
-
+                
+                newAngle = self.calculate_normal_angle(pose, pose1, pose2, pose3, pose4)
+                newOrientedPoint = OrientedPoint(pose.position, newAngle)
                 
                 
-                # Create a marker used for visualization
-                self.marker_num += 1
-                marker = Marker()
-                marker.header.stamp = rospy.Time(0)
-                marker.header.frame_id = 'map'
-                marker.pose = pose
-                marker.type = Marker.CUBE
-                marker.action = Marker.ADD
-                marker.frame_locked = False
-                marker.lifetime = rospy.Duration.from_sec(10)
-                marker.id = self.marker_num
-                marker.scale = Vector3(0.1, 0.1, 0.1)
-                marker.color = ColorRGBA(0, 1, 0, 1)
-                
-                smallest_dist = 100
+                close = False
 
-                for i in range(len(self.marker_array.markers)):
-                    marker_i = self.marker_array.markers[i]
-                    pose11 = marker_i.pose.position
-                    pose22 = marker.pose.position
-                    pose1_np = np.array([pose11.x, pose11.y ,pose11.z])
-                    pose2_np = np.array([pose22.x, pose22.y ,pose22.z])
+                for i in range(len(self.marker_array)):
+                    if (self.marker_array[i].is_close(newOrientedPoint)):
+                        close = True
+                        break
+                if len(self.marker_array) == 0 or not close:
+                    for p_ in [pose1, pose2, pose3, pose4]:
+                        self.add_marker(p_)
+                        self.marker_array.append(newOrientedPoint)
+
+                    msg = ObjectDetection()
+                    msg.goal = self.calculate_approaching_point(pose, face_distance, pose1, pose2, pose3, pose4)
+                    msg.s = "face detected :)"
+                    self.face_pub.publish(msg)
 
 
-                    squared_dist = np.sum((pose1_np-pose2_np)**2, axis=0)
-                    dist = np.sqrt(squared_dist)
-                    if dist < smallest_dist:
-                        smallest_dist = dist
-                if len(self.marker_array.markers) == 0 or smallest_dist >= 0.5:
-                        for p_ in [pose1, pose2, pose3, pose4]:
-                            self.add_marker(p_)
+    def calculate_normal_angle(self, face_center_pose, pose1, pose2, pose3, pose4):
+        # izračuna normalo in vrne njen kot
+        
+        #trenutna poza robota
+        p1 = self.current_pose.pose.pose.position
+        #poza obraza
+        p2 = face_center_pose.position
 
-                        #self.marker_array.markers.append(marker)
-                        self.markers_pub.publish(self.marker_array)
-                        msg = ObjectDetection()
-                        msg.goal = self.calculate_approaching_point(pose, face_distance, pose1, pose2, pose3, pose4)
-                        msg.s = "face detected :)"
-                        self.face_pub.publish(msg)
+        #slika je ravnina zračunamo normalo
+        normal_vector = np.array(self.get_normal_on_face(pose1, pose2, pose3, pose4))
+        normal_vector[2] = 0
 
+        #vektor ki oribližno pove kam gledamo
+        move_vec = np.array([p2.x - p1.x, p2.y-p1.y, 0])
 
+        #kot med tem kam mi gledamo in kam gleda normala 
+        cosine_between = np.dot(normal_vector,move_vec)/norm(normal_vector)/norm(move_vec) 
+
+        #če je kot večji od -+ 90 (0 do -1) pomeni da normala gleda proti nam, če ne jo obrnemo proti nam 
+        if cosine_between >= 0:
+            normal_vector = normal_vector * (-1)
+        
+
+        normal_vector[1] = normal_vector[1] * (-1)
+
+        normal_vector /= np.sqrt(np.sum(normal_vector**2))
+        return np.arctan2(normal_vector[1], normal_vector[0])
+    
 
     def calculate_approaching_point(self, face_center_pose, dist, pose1, pose2, pose3, pose4):
         #trenutna poza robota
