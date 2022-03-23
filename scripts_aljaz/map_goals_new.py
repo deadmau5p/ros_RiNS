@@ -29,6 +29,7 @@ class GoalSetter:
         self.location = Point()
         
         #Aljaz goali, nevem zakaj mormo met drgacne ?
+        """
         self.goals =[
             ["explore_goal", -3.8, 3.2],
             ["explore_goal", -3.34, 2.80],
@@ -51,7 +52,7 @@ class GoalSetter:
             ["explore_goal", -2.16, -0.34],
             ["explore_goal", -1.0, 0.19],
             ["explore_goal", -1.82, 1.44],
-            ["explore_goal", -2.37, 2.24],
+            #["explore_goal", -2.37, 2.24],
             ["explore_goal", -0.7, 2],
             ["explore_goal", 1.3, 1.8],
             ["explore_goal", 1.5, 0.5],
@@ -59,7 +60,7 @@ class GoalSetter:
             ["explore_goal", 0.18, -0.4],
             ["explore_goal", 1.6, -1],
             ["explore_goal", 2.6, -1.4]]
-        """
+        
         self.exeTimeout = rospy.Duration(20)
         self.preemptTimeout = rospy.Duration(10)
         
@@ -109,13 +110,12 @@ class GoalSetter:
         goal.target_pose.header.frame_id="map"
         goal.target_pose.pose.position.x = goal_[1]
         goal.target_pose.pose.position.y = goal_[2]
-        neki = quaternion_from_euler(0,0,self.angle)
-        goal.target_pose.pose.orientation.w = neki[3]
-        goal.target_pose.pose.orientation.z = neki[2]
+        goal.target_pose.pose.orientation.w = goal_[3]
+        goal.target_pose.pose.orientation.z = goal_[4]
         goal.target_pose.header.stamp = rospy.Time.now()
         self.simpleAction.send_goal_and_wait(goal)
         print("Hello from ROS")
-        time.sleep(1)
+        time.sleep(3)
         return
                     
         # move_vec = np.array([p2.x - p1.x, p2.y-p1.y])

@@ -302,9 +302,6 @@ class face_localizer:
 
         #slika je ravnina zračunamo normalo
         normal_vector = np.array(self.get_normal_on_face(pose1, pose2, pose3, pose4))
-
-
-        orient = quaternion_from_euler(normal_vector[0], normal_vector[1], normal_vector[2])
         normal_vector[2] = 0
 
         #vektor ki oribližno pove kam gledamo
@@ -326,8 +323,14 @@ class face_localizer:
         approach_point.position.x = goal_coor[0]
         approach_point.position.y = goal_coor[1]
         approach_point.position.z = 0
-        normal_vector = normal_vector * (-1)
-        orient = quaternion_from_euler(normal_vector[0], normal_vector[1], normal_vector[2])
+
+        if cosine_between >= 0:
+            normal_vector = normal_vector * (-1)
+
+        normal_vector /= np.sqrt(np.sum(normal_vector**2))
+        angle1 = np.arctan2(normal_vector[1], normal_vector[0])
+        orient = quaternion_from_euler(0, 0, angle1)
+
         approach_point.orientation.x = orient[0]
         approach_point.orientation.y = orient[1]
         approach_point.orientation.z = orient[2]
