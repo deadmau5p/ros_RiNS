@@ -38,7 +38,7 @@ class GoalSetter:
             ["explore_goal", -2.38, 1.89],
             ["explore_goal", -1.06, 1.92],
             ["explore_goal", 0.081, 1.866],
-            ["explore_goal", 1.4, 1.59],
+            ["explore_goal", 1.30, 1.91],
             ["explore_goal", 1.41, 0.339],
             ["explore_goal", 0.81, -0.009],
             ["explore_goal", 0.115, 0.817],
