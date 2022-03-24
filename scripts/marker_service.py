@@ -17,7 +17,7 @@ from task1.msg import MakeMarker
 class marker_service:
     def __init__(self):
         self.current_pose = None
-        rospy.init_node('face_localizer', anonymous=True)
+        rospy.init_node('marker_node', anonymous=True)
 
         self.marker_array = MarkerArray()
         self.marker_id = 0
@@ -40,7 +40,7 @@ class marker_service:
         marker.type = Marker.CUBE
         marker.action = Marker.ADD
         marker.frame_locked = False
-        marker.lifetime = rospy.Duration.from_sec(10)
+        #marker.lifetime = rospy.Duration.from_sec(10)
         marker.scale = Vector3(0.1, 0.1, 0.1)
         marker.color = self.colors[make.color]
         marker.id = self.marker_id

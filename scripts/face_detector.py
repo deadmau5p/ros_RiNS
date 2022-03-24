@@ -259,11 +259,12 @@ class face_localizer:
                     if (self.marker_array[i].is_close(newOrientedPoint)):
                         close = True
                         break
-                if len(self.marker_array) == 0 or not close:
-                    for p_ in [pose1, pose2, pose3, pose4]:
-                        self.add_marker(p_)
-                        self.marker_array.append(newOrientedPoint)
+                #for p_ in [pose1, pose2, pose3, pose4]:
+                    #self.add_marker(p_)
 
+                if len(self.marker_array) == 0 or not close:
+                    self.marker_array.append(newOrientedPoint)
+                    self.add_marker(pose)
                     msg = ObjectDetection()
                     msg.goal = self.calculate_approaching_point(pose, face_distance, pose1, pose2, pose3, pose4)
                     msg.s = "face detected :)"

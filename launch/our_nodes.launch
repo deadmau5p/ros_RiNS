@@ -1,0 +1,7 @@
+<launch>
+
+  <node name="marker_node" pkg="task1" type="marker_service.py" output="screen" />
+  <node name="goal_setter" pkg="task1" type="map_goals_new.py" output="screen"/>
+  <node name="face_localizer" pkg="task1" type="face_detector.py" output="screen"/>
+
+</launch>

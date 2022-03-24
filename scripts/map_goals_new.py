@@ -31,22 +31,24 @@ class GoalSetter:
         self.marker_pub = rospy.Publisher('/marker_service/input', MakeMarker, queue_size=1000)
         
         #Aljaz goali, nevem zakaj mormo met drgacne ?
-        """
+        
         self.goals =[
-            ["explore_goal", -3.8, 3.2],
-            ["explore_goal", -3.34, 2.80],
-            ["explore_goal", -2.8, 1.61],
-            ["explore_goal", -3.61, 1.30],
-            ["explore_goal", -2.66, 0.45],
-            ["explore_goal", -2.23, -0.09],
-            ["explore_goal", -1.19, -0.28],
-            ["explore_goal", -0.06, 0.15],
-            ["explore_goal", 0.6, 0.57],
-            ["explore_goal", -0.37, 1.72],
-            ["explore_goal", -1.12, 1.48],
-            ["explore_goal", -1.45, 2.6],
-            ["explore_goal",-0.69, 3.45],
-            ["explore_goal",-2.26, 3.56],
+            ["explore_goal", -1.23, -0.241],
+            ["explore_goal", -1.69, 1.04],
+            ["explore_goal", -2.38, 1.89],
+            ["explore_goal", -1.06, 1.92],
+            ["explore_goal", 0.081, 1.866],
+            ["explore_goal", 1.4, 1.59],
+            ["explore_goal", 1.41, 0.339],
+            ["explore_goal", 0.81, -0.009],
+            ["explore_goal", 0.115, 0.817],
+            ["explore_goal", 0.07, -0.546],
+            ["explore_goal", 1.71, -1.049],
+            ["explore_goal", 2.554, -1.51],
+            ["explore_goal",0.988, -1.936],
+            ["explore_goal",0.026, -1.81],
+            ["explore_goal",-1.079, -1.43],
+            ["explore_goal",-2.283, -0.3337],
         ]
         """
         self.goals =[["explore_goal", 0.89, -1.83],
@@ -62,7 +64,7 @@ class GoalSetter:
             ["explore_goal", 0.18, -0.4],
             ["explore_goal", 1.6, -1],
             ["explore_goal", 2.6, -1.4]]
-        
+        """
         self.exeTimeout = rospy.Duration(20)
         self.preemptTimeout = rospy.Duration(10)
         
